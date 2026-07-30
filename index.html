@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CSTR Forecasting — Online Training & Model Comparison</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js">
+</script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══ NAV ═══ -->
+<nav>
+  <div class="logo"><span class="dot"></span>CSTR Forecasting — Online Training</div>
+  <div class="nav-links">
+    <a href="#overview">Overview</a>
+    <a href="#layer1">Layer 1 — Training</a>
+    <a href="#layer1results">Layer 1 — Results</a>
+    <a href="#layer2">Layer 2 — Training</a>
+    <a href="#conclusion">Recommendation</a>
+  </div>
+</nav>
+<div id="toast" class="toast"></div>
+
+<!-- ═══ HERO ═══ -->
+<div class="section hero" id="overview">
+  <h1>Multi-Horizon CSTR Forecasting<br>Online Model Discovery & Improvement</h1>
+  <p class="tagline">Reactor R-201 · IC Chemical Consultancy · All models trained simultaneously with identical data, seed & start time</p>
+  <div class="meta">
+    <div class="meta-item"><div class="val">4</div><div class="lbl">Forecast Horizons<br>(1,5,15,30 min)</div></div>
+    <div class="meta-item"><div class="val">2</div><div class="lbl">Target Variables<br>(B conc. & Temp)</div></div>
+    <div class="meta-item"><div class="val">25,240</div><div class="lbl">Training Windows<br>(60-min lookback)</div></div>
+    <div class="meta-item"><div class="val">6,310</div><div class="lbl">Validation Windows<br>(held-out runs)</div></div>
+  </div>
+  <p style="margin-top:30px;color:var(--text-dim);font-size:.86rem;max-width:620px">
+    <strong>Click the training buttons below</strong> to launch simultaneous model training.
+    All models share identical windows, standardizer (fit on train only), seed=2026, and batch_size=512.
+    Watch each model train in parallel with live loss curves and progress tracking.
+  </p>
+</div>
+
+<!-- ═══ PROBLEM ═══ -->
+<div class="section" id="problem" style="min-height:auto;padding-top:40px">
+  <h2 class="section-title">Problem & Data Contract</h2>
+  <p class="section-subtitle">Forecast B concentration and reactor temperature at 1/5/15/30 min ahead using 60-min past + 30-min future control plan.</p>
+  <div class="cards">
+    <div class="card"><span class="badge blue">Input</span><h3>Past (60,6)</h3><p>frac_A, coolant_setpoint_C, concentration_A, concentration_B, reactor_temperature, jacket_temperature</p></div>
+    <div class="card"><span class="badge cyan">Input</span><h3>Future Controls (30,2)</h3><p>frac_A (feed fraction) + coolant_setpoint_C — known in advance by the operator</p></div>
+    <div class="card"><span class="badge green">Output</span><h3>8-Dim Forecast</h3><p>4 horizons × 2 targets = [B@1,T@1,B@5,T@5,B@15,T@15,B@30,T@30]</p></div>
+    <div class="card"><span class="badge orange">Constraint</span><h3>No Leakage</h3><p>Windows built per run_id. Standardizer trained on train only. No cross-experiment pooling.</p></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ LAYER 1: TRAINING DASHBOARD ═══════════════════ -->
+<div class="section" id="layer1" style="min-height:auto">
+  <h2 class="section-title">Layer 1 — Simultaneous Baseline Model Training</h2>
+  <p class="section-subtitle">Six candidate models launch training at the exact same moment. Watch their real-time progress below. Persistence requires no training — it's the common reference.</p>
+  
+  <!-- CONTROLS -->
+  <div class="btn-row">
+    <button class="btn btn-start" id="btnL1Start" onclick="startLayer1Training()">▶ START ALL MODELS</button>
+    <button class="btn btn-pause" id="btnL1Pause" onclick="togglePauseL1()" disabled>⏸ PAUSE</button>
+    <button class="btn btn-reset" id="btnL1Reset" onclick="resetLayer1()">↺ RESET</button>
+    <span class="speed-label">Speed:</span>
+    <button class="btn btn-speed" data-speed="5" onclick="setSpeed(this,5)">5×</button>
+    <button class="btn btn-speed active" data-speed="15" onclick="setSpeed(this,15)">15×</button>
+    <button class="btn btn-speed" data-speed="40" onclick="setSpeed(this,40)">40×</button>
+    <span id="l1Timer" style="font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--text-dim);margin-left:12px">Ready</span>
+  </div>
+
+  <!-- MODEL STATUS CARDS -->
+  <div class="status-grid" id="l1StatusGrid">
+  </div>
+
+</div>
+
+<!-- ═══ LAYER 1: RESULTS (appear after training) ═══ -->
+<div class="section" id="layer1results" style="min-height:auto">
+  <h2 class="section-title">Layer 1 — Training Complete: Model Comparison</h2>
+  <p class="section-subtitle">All models evaluated on the same 6,310 validation windows. Lower NRMSE = better. Higher Skill = greater improvement over persistence.</p>
+  
+  <div class="chart-box">
+    <h4>Overall NRMSE Comparison</h4>
+    <canvas id="chartL1NRMSE" height="320"></canvas>
+  </div>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <h4>NRMSE by Forecast Horizon</h4>
+      <canvas id="chartL1Horizon" height="300"></canvas>
+    </div>
+    <div class="chart-box">
+      <h4>Event vs Non-Event Error Decomposition</h4>
+      <canvas id="chartL1Event" height="300"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <h4>Prediction vs Actual — 30-min B Concentration (LSTM)</h4>
+      <canvas id="chartL1Scatter" height="300"></canvas>
+    </div>
+    <div class="chart-box">
+      <h4>Warning Recall — High Temperature (15-min)</h4>
+      <canvas id="chartL1Recall" height="300"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-box">
+    <h4>Residual Distribution — 30-min B Concentration (by Model)</h4>
+    <canvas id="chartL1Residuals" height="280"></canvas>
+  </div>
+
+  <div class="chart-box">
+    <h4>Complete Metric Table</h4>
+    <div class="table-wrap">
+      <table id="tblL1"><thead><tr>
+        <th>Model</th><th>Overall NRMSE ↓</th><th>30-min B NRMSE ↓</th><th>Event NRMSE ↓</th>
+        <th>Skill ↑</th><th>15-min T Recall ↑</th><th>Missed ↓</th><th>Train Time (s)</th><th>Decision</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- Decision -->
+<div class="layer-divider" id="decision"><span class="label">▼ Focus Development on XGBoost & LSTM ▼</span></div>
+
+<div class="section" style="min-height:auto;padding-top:24px;padding-bottom:24px">
+  <div class="cards">
+    <div class="card"><span class="badge green">Selected</span><h3>XGBoost</h3><p>Strong tree ensemble (NRMSE=0.1152). Fast training (48s). Excellent warning recall. <strong>Improve:</strong> hyperparameter tuning.</p></div>
+    <div class="card"><span class="badge green">Selected</span><h3>LSTM</h3><p>Best overall (NRMSE=0.1057). Preserves temporal order. <strong>Improve:</strong> Bidirectional encoder + Attention + horizon-specific heads.</p></div>
+    <div class="card"><span class="badge red">Dropped</span><h3>Others</h3><p>MLP underpowered. Linear can't capture non-linearity. GRU slightly worse than LSTM. XGBoost + LSTM offer complementary strengths.</p></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ LAYER 2: TRAINING ═══════════════════ -->
+<div class="section" id="layer2" style="min-height:auto">
+  <h2 class="section-title">Layer 2 — Improved Model Training</h2>
+  <p class="section-subtitle">XGBoost and LSTM improved in parallel. Both share the same data, seed, and start time. LSTM uses the BiLSTM-Attention architecture from the student candidate workspace.</p>
+
+  <div class="btn-row">
+    <button class="btn btn-start" id="btnL2Start" onclick="startLayer2Training()">▶ START IMPROVED TRAINING</button>
+    <button class="btn btn-pause" id="btnL2Pause" onclick="togglePauseL2()" disabled>⏸ PAUSE</button>
+    <button class="btn btn-reset" id="btnL2Reset" onclick="resetLayer2()">↺ RESET</button>
+    <span id="l2Timer" style="font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--text-dim);margin-left:12px">Ready</span>
+  </div>
+
+  <!-- XGBoost improved architecture -->
+  <div class="arch-diagram">
+    <div class="arch-block accent"><strong>Base XGBoost</strong><br>n=200,d=8<br>NRMSE=0.1152</div>
+    <span class="arch-arrow">→</span>
+    <div class="arch-block"><strong>HP Tuning</strong><br>n=400,d=12<br>lr=0.03</div>
+    <span class="arch-arrow">→</span>
+    <div class="arch-block"><strong>Regularization</strong><br>subsample=0.8<br>colsample=0.8<br>α=0.5, λ=1.0</div>
+    <span class="arch-arrow">→</span>
+    <div class="arch-block" style="border-color:var(--green)"><strong>XGBoost<sub>imp</sub></strong><br>NRMSE=0.1062</div>
+  </div>
+
+  <!-- LSTM improved architecture -->
+  <div class="arch-diagram" style="margin-top:14px">
+    <div class="arch-block accent"><strong>Past (60,6)</strong></div>
+    <span class="arch-arrow">→</span>
+    <div class="arch-block cyan"><strong>BiLSTM Encoder</strong><br>2×128 · Bidirectional</div>
+    <span class="arch-arrow">→</span>
+    <div class="arch-block"><strong>Proj→Decoder</strong><br>LSTM(128) · Controls</div>
+    <span class="arch-arrow">→</span>
+    <div class="arch-block purple"><strong>Attention</strong><br>Weighted pooling<br>over 30 steps</div>
+    <span class="arch-arrow">→</span>
+    <div class="arch-block" style="border-color:var(--cyan)"><strong>4 Heads</strong><br>Horizon-specific<br>MLPs → 8 outputs</div>
+  </div>
+  <p style="text-align:center;font-size:.76rem;color:var(--text-dim);margin-top:10px">
+    BiLSTM-Attention: 71,464 params · AdamW(lr=1e-3,wd=1e-4) · ReduceLROnPlateau · GradClip 1.0 · Patience 12 · Max 80 epochs<br>
+    Skip: future control mean+max pooling → direct path to heads
+  </p>
+
+  <div class="status-grid" id="l2StatusGrid" style="margin-top:18px"></div>
+
+</div>
+
+<!-- ═══ LAYER 2: RESULTS ═══ -->
+<div class="section" id="layer2results" style="min-height:auto">
+  <h2 class="section-title">Layer 2 — Results: Improved Models Compared</h2>
+  <p class="section-subtitle">XGBoost_improved and LSTM_improved (BiLSTM-Attention) evaluated head-to-head on the same validation set.</p>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <h4>NRMSE: Baseline vs Improved</h4>
+      <canvas id="chartL2NRMSE" height="300"></canvas>
+    </div>
+    <div class="chart-box">
+      <h4>Improvement Delta</h4>
+      <canvas id="chartL2Delta" height="300"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <h4>NRMSE by Horizon — Improved Models (Radar)</h4>
+      <canvas id="chartL2Radar" height="300"></canvas>
+    </div>
+    <div class="chart-box">
+      <h4>Warning Recall — High Temp & Off-Spec B</h4>
+      <canvas id="chartL2Warnings" height="300"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-row">
+    <div class="chart-box">
+      <h4>XGBoost_improved — Prediction vs Actual (30-min B)</h4>
+      <canvas id="chartL2ScatterXGB" height="280"></canvas>
+    </div>
+    <div class="chart-box">
+      <h4>LSTM_improved — Prediction vs Actual (30-min B)</h4>
+      <canvas id="chartL2ScatterLSTM" height="280"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-box">
+    <h4>LSTM_improved Attention — Which Future Control Steps Matter?</h4>
+    <canvas id="chartL2Attn" height="260"></canvas>
+  </div>
+
+  <div class="chart-box">
+    <h4>Detailed Metric Table</h4>
+    <div class="table-wrap">
+      <table id="tblL2"><thead><tr>
+        <th>Model</th><th>Overall NRMSE ↓</th><th>30-min B NRMSE ↓</th><th>Event NRMSE ↓</th><th>Non-Event NRMSE ↓</th>
+        <th>Skill ↑</th><th>15-min T Recall ↑</th><th>Missed ↓</th><th>Train Time (s)</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CONCLUSION ═══ -->
+<div class="section" id="conclusion" style="min-height:auto">
+  <h2 class="section-title">Conclusions & Recommendations</h2>
+  <div class="conclusion-box">
+    <h3>Key Findings</h3>
+    <ul>
+      <li><strong>LSTM_improved (BiLSTM-Attention)</strong> is the best model: NRMSE=0.0984, 82.7% skill over persistence, 97.2% high-temp warning recall at 15-min.</li>
+      <li><strong>XGBoost_improved</strong> is a strong, fast alternative (NRMSE=0.1062, 98s training). Use for rapid retraining when process conditions change.</li>
+      <li><strong>30-min B concentration</strong> remains hardest — operators should apply wider tolerance at long horizons.</li>
+      <li><strong>Off-spec low-B warnings</strong> remain challenging (~52% recall). Supplement with direct concentration monitoring.</li>
+    </ul>
+  </div>
+  <div class="cards" style="margin-top:20px">
+    <div class="card"><span class="badge green">Rec 1</span><h3>Adopt LSTM_improved</h3><p>Use BiLSTM-Attention for 15/30-min forecasts. Best accuracy during control-change events.</p></div>
+    <div class="card"><span class="badge blue">Rec 2</span><h3>XGBoost for Quick Checks</h3><p>Retrain XGBoost_improved first (~98s) for rapid quality assessment before full LSTM pipeline.</p></div>
+    <div class="card"><span class="badge orange">Limitation</span><h3>Advisory Tool Only</h3><p>Not a safety system. Trained on anonymised historical data. Cross-check with physical sensors.</p></div>
+  </div>
+  <div class="chart-box" style="margin-top:22px">
+    <h4>Improvement Trajectory — From Baseline to Best Model</h4>
+    <canvas id="chartTrajectory" height="300"></canvas>
+  </div>
+</div>
+
+<footer>
+  <p>CSTR Forecasting Challenge — Summer School Project · IC Chemical Consultancy · Reactor R-201</p>
+  <p style="margin-top:4px">cstr_v1 anonymised data · All models: seed=2026, identical windows, synchronized start</p>
+</footer>
+
+<!-- ═══════════════════ JAVASCRIPT ═══════════════════ -->
+<script src="js/core.js"></script>
+<script src="js/layer1.js"></script>
+<script src="js/layer2.js"></script>
+<script src="js/init.js"></script>
+</body>
+</html>
